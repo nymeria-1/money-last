@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# How Long Will My Money Last
 
-## Getting Started
+A responsive web calculator that projects how long a nest egg lasts under
+regular, inflation-indexed withdrawals — with room for one-off lump-sum
+withdrawals and windfalls in any year.
 
-First, run the development server:
+**Live URL:** [How Long Will My Money Last](https://money-last.vercel.app)
+
+## Setup
+
+Requirements: Node.js 20.9+ (Next.js 16 minimum).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # local dev at http://localhost:3000
+npm run build        # production build
+npm run start        # serve the production build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deploying to Vercel
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Push this repo to GitHub / GitLab / Bitbucket and import it at
+[vercel.com/new](https://vercel.com/new). No environment variables are needed
+— the calculator runs entirely client-side.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project layout
 
-## Learn More
+```
+src/
+├── lib/
+│   ├── calc.ts             Pure calculation engine (no React)
+│   └── format.ts           Currency + compact-number formatters
+└── app/
+│   ├── layout.tsx          Root layout, loads Poppins + Tiempos fonts
+│   ├── page.tsx            Route entry — renders <Calculator />
+│   └── globals.css         Theme tokens, ambient glow, keyframes
+└── components/
+    ├── Calculator.tsx      Composition root: state + page shape
+    ├── AssumptionsCard.tsx Inputs panel (sticky on desktop)
+    ├── ResultCard.tsx      Depletion / survives headline card
+    ├── BalanceChart.tsx    Recharts area chart
+    ├── LumpSumsCard.tsx    Collapsible year-by-year lump-sum editor
+    ├── DrawdownTable.tsx   Full year-by-year drawdown table
+    ├── AnimatedAmount.tsx  Tween hook + display component
+    ├── Card.tsx            Frosted-glass surface primitive
+    └── NumField.tsx        Number-input controls (large + inline)
+```
 
-To learn more about Next.js, take a look at the following resources:
+Each sub-card is self-contained and receives only the props it needs;
+`Calculator.tsx` owns all state and passes callbacks down.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Calculation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The calc engine reproduces the supplied Excel model exactly. Per year:
 
-## Deploy on Vercel
+```
+rm      = (1 + annualReturn)^(1/12) - 1     // monthly compounding rate
+end     = start * (1+rm)^12
+        - (regular/12) * ((1+rm)^12 - 1) / rm     // Excel's FV(rm, 12, regular/12, -start)
+        - lumpOut
+        + windfall
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `regular` starts at `monthlyWithdrawal * 12` and is multiplied by
+  `(1 + annualInflation)` each subsequent year (matching the Excel).
+- Once the closing balance goes below zero, the next year opens at zero and
+  the withdrawal for that year resets to zero (mirrors the sheet's
+  `IF(prevEnd<0, 0, ...)` guard).
+- `todayValue = start / (1 + annualInflation)^year`.
+- `depletionYear` is the first year whose closing balance is negative.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Verified against the reference scenario in the supplied file
+(**$1,650,000** starting balance, **7.5%** average return, **3%** inflation,
+**$10,000** monthly withdrawal, windfalls at years 1/5/9): all 51 rows and 6
+columns match the Excel cached values **to the cent**, and depletion occurs
+in **year 21** as the brief specifies.
+
+## Tech
+
+- **Next.js 16** (App Router, Turbopack) + **React 19**
+- **TypeScript** with strict mode
+- **Tailwind CSS v4** — theme tokens defined in `globals.css`
+- **Recharts** — area chart
+- **Poppins** (Google Fonts) for body, **Tiempos Headline** (local .woff2)
+  for headings — pulled from Q Wealth's website
+
+No database, no API routes, no auth. The whole calculator runs in the
+browser.
